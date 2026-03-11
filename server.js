@@ -55,11 +55,24 @@ app.get('/photos', async (req, res) => {
 });
 
 app.get('/photos/:id', async (req, res) => {
-    const id = req.params.id;
+    const { id } = req.params;
+    const cacheKey = `photo:${id}`;
+
     try {
+        const cachedPhoto = await redisClient.get(cacheKey);
+
+        if (cachedPhoto) {
+            console.log("cache Hit (Single Photo)");
+            return res.json(JSON.parse(cachedPhoto));
+        }
+
+        console.log("cache Miss (Single Photo)");
         const { data } = await axios.get(`https://jsonplaceholder.typicode.com/photos/${id}`);
+
+        await redisClient.setEx(cacheKey, 3600, JSON.stringify(data));
         res.json(data);
     } catch (err) {
+        console.error('Error fetching photo:', err);
         res.status(500).json({ error: 'Error fetching photo' });
     }
 });
