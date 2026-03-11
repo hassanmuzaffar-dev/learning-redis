@@ -30,7 +30,33 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-app.get('/photos', async (req, res) => {
+const rateLimiter = async (req, res, next) => {
+    const ip = req.ip;
+    const key = `rate:${ip}`;
+    const LIMIT = 5;
+    const WINDOW = 60; // seconds
+
+    try {
+        const requests = await redisClient.incr(key);
+
+        if (requests === 1) {
+            await redisClient.expire(key, WINDOW);
+        }
+
+        if (requests > LIMIT) {
+            return res.status(429).json({
+                message: "Too many requests. Try again later."
+            });
+        }
+
+        next();
+    } catch (err) {
+        console.error("Rate limiter error:", err);
+        next();
+    }
+};
+
+app.get('/photos', rateLimiter, async (req, res) => {
     const albumId = req.query.albumId;
     const cacheKey = `photos?albumId=${albumId || 'all'}`;
 
